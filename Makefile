@@ -6,12 +6,13 @@ SHELL         := bash
 .DELETE_ON_ERROR:
 .SUFFIXES:
 
-GO              ?= go
-GOFUMPT         ?= gofumpt
-GOFUMPT_VERSION ?= v0.8.0
-MAKEFILE_DIR    := $(abspath $(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
-PREFIX          ?= $(MAKEFILE_DIR)/.build
-BINNAME         ?= app
+GO               ?= go
+GOFUMPT          ?= gofumpt
+GOFUMPT_VERSION  ?= v0.8.0
+MAKEFILE_DIR     := $(abspath $(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
+PREFIX           ?= $(MAKEFILE_DIR)/.build
+BINNAME          ?= app
+COVER_INSTRUMENT ?= 0
 
 # https://tensin.name/blog/makefile-escaping.html
 define noexpand
@@ -29,11 +30,18 @@ $(eval $(call noexpand,GOFUMPT))
 $(eval $(call noexpand,GOFUMPT_VERSION))
 $(eval $(call noexpand,PREFIX))
 $(eval $(call noexpand,BINNAME))
+$(eval $(call noexpand,COVER_INSTRUMENT))
 
 escape = $(subst ','\'',$(1))
 squote = '$(call escape,$(1))'
 
 OUTPUT := $(PREFIX)/$(BINNAME)$(shell $(call squote,$(GO)) env GOEXE)
+
+ifneq ($(COVER_INSTRUMENT),0)
+    COVER_BUILD_OPTION := -cover
+else
+    COVER_BUILD_OPTION :=
+endif
 
 .PHONY: all
 all: format test build
@@ -52,7 +60,7 @@ test:
 
 .PHONY: build
 build:
-	CGO_ENABLED=0 $(call squote,$(GO)) build -C $(call squote,$(MAKEFILE_DIR)) -trimpath -o $(call squote,$(OUTPUT)) ./cmd/app
+	CGO_ENABLED=0 $(call squote,$(GO)) build -C $(call squote,$(MAKEFILE_DIR)) -trimpath $(COVER_BUILD_OPTION) -o $(call squote,$(OUTPUT)) ./cmd/app
 
 .PHONY: clean
 clean:
