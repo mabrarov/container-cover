@@ -35,7 +35,8 @@ $(eval $(call noexpand,COVER_INSTRUMENT))
 escape = $(subst ','\'',$(1))
 squote = '$(call escape,$(1))'
 
-OUTPUT := $(PREFIX)/$(BINNAME)$(shell $(call squote,$(GO)) env GOEXE)
+BUILD_OUTPUT    := $(PREFIX)/$(BINNAME)$(shell $(call squote,$(GO)) env GOEXE)
+COVERAGE_OUTPUT := $(MAKEFILE_DIR)/coverage.out
 
 ifneq ($(COVER_INSTRUMENT),0)
     COVER_BUILD_OPTION := -cover
@@ -56,12 +57,20 @@ format: format-deps
 
 .PHONY: test
 test:
-	$(call squote,$(GO)) test -C $(call squote,$(MAKEFILE_DIR)) -cover ./...
+	$(call squote,$(GO)) test -C $(call squote,$(MAKEFILE_DIR)) -cover -coverpkg=./... -coverprofile=$(call squote,$(COVERAGE_OUTPUT)) ./...
+	$(call squote,$(GO)) tool -C $(call squote,$(MAKEFILE_DIR)) cover -func=$(call squote,$(COVERAGE_OUTPUT))
 
 .PHONY: build
 build:
-	CGO_ENABLED=0 $(call squote,$(GO)) build -C $(call squote,$(MAKEFILE_DIR)) -trimpath $(COVER_BUILD_OPTION) -o $(call squote,$(OUTPUT)) ./cmd/app
+	CGO_ENABLED=0 $(call squote,$(GO)) build -C $(call squote,$(MAKEFILE_DIR)) -trimpath $(COVER_BUILD_OPTION) -o $(call squote,$(BUILD_OUTPUT)) ./cmd/app
 
 .PHONY: clean
-clean:
-	$(RM) $(call squote,$(OUTPUT))
+clean: clean-app clean-coverage
+
+.PHONY: clean-app
+clean-app:
+	$(RM) $(call squote,$(BUILD_OUTPUT))
+
+.PHONY: clean-coverage
+clean-coverage:
+	$(RM) $(call squote,$(COVERAGE_OUTPUT))
