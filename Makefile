@@ -8,7 +8,7 @@ SHELL         := bash
 
 GO                 ?= go
 GOFUMPT            ?= gofumpt
-GOFUMPT_VERSION    ?= v0.8.0
+GOFUMPT_VERSION    ?= v0.9.2
 GOCOVMERGE         ?= gocovmerge
 GOCOVMERGE_VERSION ?= v2.14.0
 MAKEFILE_DIR       := $(abspath $(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
