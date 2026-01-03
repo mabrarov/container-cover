@@ -22,7 +22,7 @@ const (
 	hostCoverDirEnv      = "COVER_HOST_DIR"
 )
 
-func Test_NoArgs(t *testing.T) {
+func TestNoArgs(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping test in short mode")
 	}
@@ -38,7 +38,7 @@ func Test_NoArgs(t *testing.T) {
 	copyCoverage(t, ctx, rootDir, container)
 }
 
-func Test_SingleArg(t *testing.T) {
+func TestSingleArg(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping test in short mode")
 	}
@@ -68,12 +68,12 @@ func getRootDir(t *testing.T) string {
 func runContainer(t *testing.T, ctx context.Context, rootDir string, args []string) testcontainers.Container {
 	t.Helper()
 
-	containerCoverDir := os.Getenv(containerCoverDirEnv)
 	var (
 		buildArgs map[string]*string
 		env       map[string]string
 		mounts    []testcontainers.ContainerMount
 	)
+	containerCoverDir := os.Getenv(containerCoverDirEnv)
 	if len(containerCoverDir) != 0 {
 		buildArgs = map[string]*string{
 			"COVER_INSTRUMENT": toPtr("1"),
@@ -102,7 +102,7 @@ func runContainer(t *testing.T, ctx context.Context, rootDir string, args []stri
 	testcontainers.CleanupContainer(t, container, testcontainers.StopTimeout(0))
 	require.NoError(t, err, "failed to create and start container")
 
-	err = wait.ForExit().WaitUntilReady(ctx, container)
+	err = wait.ForExit().WithExitTimeout(5*time.Minute).WaitUntilReady(ctx, container)
 	require.NoError(t, err, "failed to wait until container stops")
 
 	return container
@@ -111,14 +111,14 @@ func runContainer(t *testing.T, ctx context.Context, rootDir string, args []stri
 func assertContainerLog(t *testing.T, ctx context.Context, container testcontainers.Container, expected string) {
 	t.Helper()
 
-	logReader, err := container.Logs(ctx)
+	content, err := container.Logs(ctx)
 	require.NoError(t, err, "failed to get container logs")
-	defer func() { _ = logReader.Close() }()
+	defer func() { _ = content.Close() }()
 
-	actual, err := io.ReadAll(logReader)
+	actual, err := io.ReadAll(content)
 	require.NoError(t, err, "failed to read container logs")
 
-	require.Equal(t, []byte(expected), actual)
+	require.Equal(t, []byte(expected), actual, "invalid container logs")
 }
 
 func stopContainer(t *testing.T, ctx context.Context, container testcontainers.Container) {
@@ -168,11 +168,11 @@ func copyFromContainer(ctx context.Context, containerID, containerPath, hostDir 
 	}
 	defer func() { _ = provider.Close() }()
 
-	reader, stat, err := provider.Client().CopyFromContainer(ctx, containerID, containerPath)
+	content, stat, err := provider.Client().CopyFromContainer(ctx, containerID, containerPath)
 	if err != nil {
 		return fmt.Errorf("copy %q from container %q: %w", containerPath, containerID, err)
 	}
-	defer func() { _ = reader.Close() }()
+	defer func() { _ = content.Close() }()
 
 	err = os.MkdirAll(hostDir, os.ModePerm)
 	if err != nil {
@@ -180,13 +180,12 @@ func copyFromContainer(ctx context.Context, containerID, containerPath, hostDir 
 	}
 
 	srcInfo := archive.CopyInfo{
-		Path:       containerPath,
-		Exists:     true,
-		IsDir:      stat.Mode.IsDir(),
-		RebaseName: "",
+		Path:   containerPath,
+		Exists: true,
+		IsDir:  stat.Mode.IsDir(),
 	}
 
-	err = archive.CopyTo(reader, srcInfo, hostDir)
+	err = archive.CopyTo(content, srcInfo, hostDir)
 	if err != nil {
 		return fmt.Errorf("untar to %q: %w", hostDir, err)
 	}
@@ -204,12 +203,12 @@ func createDockerProvider(opts ...testcontainers.ContainerCustomizer) (*testcont
 		}
 	}
 
-	logging := req.Logger
-	if logging == nil {
-		logging = log.Default()
+	logger := req.Logger
+	if logger == nil {
+		logger = log.Default()
 	}
 
-	provider, err := req.ProviderType.GetProvider(testcontainers.WithLogger(logging))
+	provider, err := req.ProviderType.GetProvider(testcontainers.WithLogger(logger))
 	if err != nil {
 		return nil, err
 	}
