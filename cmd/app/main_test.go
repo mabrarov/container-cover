@@ -14,6 +14,7 @@ import (
 	"github.com/samber/lo"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
+	"github.com/testcontainers/testcontainers-go/log"
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
@@ -27,7 +28,7 @@ func Test_NoArgs(t *testing.T) {
 		t.Skip("skipping test in short mode")
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 	rootDir := getRootDir(t)
 
 	container, stdout := startContainer(t, ctx, rootDir, nil)
@@ -44,7 +45,7 @@ func Test_SingleArg(t *testing.T) {
 		t.Skip("skipping test in short mode")
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 	rootDir := getRootDir(t)
 
 	container, stdout := startContainer(t, ctx, rootDir, []string{"Test"})
@@ -105,7 +106,7 @@ func startContainer(t *testing.T, ctx context.Context, rootDir string, args []st
 			},
 		},
 		Started: true,
-		Logger:  testcontainers.TestLogger(t),
+		Logger:  log.TestLogger(t),
 	})
 	testcontainers.CleanupContainer(t, container, testcontainers.StopTimeout(0))
 	require.NoError(t, err, "failed to create and start container")
@@ -152,7 +153,7 @@ func copyCoverage(t *testing.T, ctx context.Context, rootDir string, container t
 func copyFromContainer(ctx context.Context, containerID, containerPath, hostDir string) error {
 	provider, err := createDockerProvider()
 	if err != nil {
-		return fmt.Errorf("get docker provider: %w", err)
+		return fmt.Errorf("create docker provider: %w", err)
 	}
 	defer func() { _ = provider.Close() }()
 
@@ -194,7 +195,7 @@ func createDockerProvider(opts ...testcontainers.ContainerCustomizer) (*testcont
 
 	logging := req.Logger
 	if logging == nil {
-		logging = &noopTestcontainersLogger{}
+		logging = log.Default()
 	}
 
 	provider, err := req.ProviderType.GetProvider(testcontainers.WithLogger(logging))
@@ -217,7 +218,3 @@ func createDockerProvider(opts ...testcontainers.ContainerCustomizer) (*testcont
 	closeProvider = false
 	return dockerProvider, nil
 }
-
-type noopTestcontainersLogger struct{}
-
-func (n noopTestcontainersLogger) Printf(_ string, _ ...any) {}
