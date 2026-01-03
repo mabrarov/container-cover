@@ -1,11 +1,8 @@
 package main_test
 
 import (
-	"archive/tar"
 	"context"
-	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -13,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/moby/go-archive"
 	"github.com/samber/lo"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
@@ -158,9 +156,9 @@ func copyFromContainer(ctx context.Context, containerID, containerPath, hostDir 
 	}
 	defer func() { _ = provider.Close() }()
 
-	reader, _, err := provider.Client().CopyFromContainer(ctx, containerID, containerPath)
+	reader, stat, err := provider.Client().CopyFromContainer(ctx, containerID, containerPath)
 	if err != nil {
-		return fmt.Errorf("copy from container: %w", err)
+		return fmt.Errorf("copy %q from container %q: %w", containerPath, containerID, err)
 	}
 	defer func() { _ = reader.Close() }()
 
@@ -169,49 +167,16 @@ func copyFromContainer(ctx context.Context, containerID, containerPath, hostDir 
 		return fmt.Errorf("create directory %q: %w", hostDir, err)
 	}
 
-	tarReader := tar.NewReader(reader)
-	defer func() { _ = reader.Close() }()
+	srcInfo := archive.CopyInfo{
+		Path:       containerPath,
+		Exists:     true,
+		IsDir:      stat.Mode.IsDir(),
+		RebaseName: "",
+	}
 
-	for {
-		entry, err := tarReader.Next()
-		if errors.Is(err, io.EOF) {
-			break
-		}
-		if err != nil {
-			return fmt.Errorf("tar reader next entry: %w", err)
-		}
-		entry.Name = filepath.Clean(entry.Name)
-		entryPath := filepath.Join(hostDir, entry.Name)
-		switch entry.Typeflag {
-		case tar.TypeDir:
-			err = os.MkdirAll(entryPath, os.FileMode(entry.Mode))
-			if err != nil {
-				return fmt.Errorf("create directory %q for entry %q: %w", entryPath, entry.Name, err)
-			}
-		case tar.TypeReg:
-			fileDir := filepath.Dir(entryPath)
-			err := os.MkdirAll(fileDir, os.ModePerm)
-			if err != nil {
-				return fmt.Errorf("create directory %q for entry %q: %w", fileDir, entry.Name, err)
-			}
-			err = func() error {
-				file, err := os.OpenFile(entryPath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, os.FileMode(entry.Mode))
-				if err != nil {
-					return fmt.Errorf("create file %q for entry %q: %w", entryPath, entry.Name, err)
-				}
-				defer func() { _ = file.Close() }()
-				_, err = io.Copy(file, tarReader)
-				if err != nil {
-					return fmt.Errorf("copy entry %q into file %q: %w", entry.Name, entryPath, err)
-				}
-				return nil
-			}()
-			if err != nil {
-				return err
-			}
-		default:
-			return fmt.Errorf("unexpected type of entry %q: %v", entry.Name, entry.Typeflag)
-		}
+	err = archive.CopyTo(reader, srcInfo, hostDir)
+	if err != nil {
+		return fmt.Errorf("untar to %q: %w", hostDir, err)
 	}
 
 	return nil
