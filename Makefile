@@ -39,11 +39,12 @@ $(eval $(call noexpand,COVER_INSTRUMENT))
 escape = $(subst ','\'',$(1))
 squote = '$(call escape,$(1))'
 
-APP_BUILD_OUTPUT          := $(PREFIX)/$(BINNAME)$(shell $(call squote,$(GO)) env GOEXE)
-COVERAGE_OUTPUT           := $(MAKEFILE_DIR)/coverage.out
-COVERAGE_OUTPUT_HOST      := $(MAKEFILE_DIR)/.build/coverage/host/coverage.out
-COVERAGE_DIR_CONTAINER    := $(MAKEFILE_DIR)/.build/coverage/container/cover
-COVERAGE_OUTPUT_CONTAINER := $(MAKEFILE_DIR)/.build/coverage/container/coverage.out
+APP_BUILD_OUTPUT            := $(PREFIX)/$(BINNAME)$(shell $(call squote,$(GO)) env GOEXE)
+COVERAGE_OUTPUT             := $(MAKEFILE_DIR)/coverage.out
+COVERAGE_OUTPUT_HOST        := $(MAKEFILE_DIR)/.build/coverage/host/coverage.out
+COVERAGE_CONTAINER_DIR      := //tmp/cover
+COVERAGE_CONTAINER_HOST_DIR := $(MAKEFILE_DIR)/.build/coverage/container/$(shell basename $(call squote,$(COVERAGE_CONTAINER_DIR)))
+COVERAGE_OUTPUT_CONTAINER   := $(MAKEFILE_DIR)/.build/coverage/container/coverage.out
 
 ifneq ($(COVER_INSTRUMENT),0)
     COVER_BUILD_OPTION := -cover
@@ -55,7 +56,7 @@ endif
 all: format test build
 
 .PHONY: deps
-deps: format-deps test-deps
+deps: format-deps test-cover-deps
 
 .PHONY: format
 format: format-deps
@@ -65,17 +66,25 @@ format: format-deps
 format-deps:
 	$(call squote,$(GO)) install mvdan.cc/gofumpt@$(call squote,$(GOFUMPT_VERSION))
 
+.PHONY: test-short
+test-short:
+	$(call squote,$(GO)) test -C $(call squote,$(MAKEFILE_DIR)) -short -v -count 1 ./...
+
 .PHONY: test
-test: test-deps
+test:
+	$(call squote,$(GO)) test -C $(call squote,$(MAKEFILE_DIR)) -v -count 1 ./...
+
+.PHONY: test-cover
+test-cover: test-cover-deps
 	mkdir -p "$$(dirname $(call squote,$(COVERAGE_OUTPUT_HOST)))"
-	$(RM) -r $(call squote,$(COVERAGE_DIR_CONTAINER))
-	COVER_DIR="$$(dirname $(call squote,$(COVERAGE_DIR_CONTAINER)))" $(call squote,$(GO)) test -C $(call squote,$(MAKEFILE_DIR)) -v -count 1 -cover -coverpkg=./... -coverprofile=$(call squote,$(COVERAGE_OUTPUT_HOST)) ./...
-	$(call squote,$(GO)) tool -C $(call squote,$(MAKEFILE_DIR)) covdata textfmt -i=$(call squote,$(COVERAGE_DIR_CONTAINER)) -o $(call squote,$(COVERAGE_OUTPUT_CONTAINER))
+	$(RM) -r $(call squote,$(COVERAGE_CONTAINER_HOST_DIR))
+	COVER_CONTAINER_DIR=$(call squote,$(COVERAGE_CONTAINER_DIR)) COVER_HOST_DIR="$$(dirname $(call squote,$(COVERAGE_CONTAINER_HOST_DIR)))" $(call squote,$(GO)) test -C $(call squote,$(MAKEFILE_DIR)) -v -count 1 -cover -coverpkg=./... -coverprofile=$(call squote,$(COVERAGE_OUTPUT_HOST)) ./...
+	$(call squote,$(GO)) tool -C $(call squote,$(MAKEFILE_DIR)) covdata textfmt -i=$(call squote,$(COVERAGE_CONTAINER_HOST_DIR)) -o $(call squote,$(COVERAGE_OUTPUT_CONTAINER))
 	$(call squote,$(GOCOVMERGE)) -o $(call squote,$(COVERAGE_OUTPUT)) $(call squote,$(COVERAGE_OUTPUT_HOST)) $(call squote,$(COVERAGE_OUTPUT_CONTAINER))
 	$(call squote,$(GO)) tool -C $(call squote,$(MAKEFILE_DIR)) cover -func=$(call squote,$(COVERAGE_OUTPUT))
 
-.PHONY: test-deps
-test-deps:
+.PHONY: test-cover-deps
+test-cover-deps:
 	$(call squote,$(GO)) install github.com/alexfalkowski/gocovmerge/v2@$(call squote,$(GOCOVMERGE_VERSION))
 
 .PHONY: build
@@ -94,4 +103,4 @@ clean-coverage:
 	$(RM) $(call squote,$(COVERAGE_OUTPUT))
 	$(RM) $(call squote,$(COVERAGE_OUTPUT_HOST))
 	$(RM) $(call squote,$(COVERAGE_OUTPUT_CONTAINER))
-	$(RM) -r $(call squote,$(COVERAGE_DIR_CONTAINER))
+	$(RM) -r $(call squote,$(COVERAGE_CONTAINER_HOST_DIR))

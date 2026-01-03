@@ -12,8 +12,4 @@ FROM scratch
 
 COPY --from=build /app/.build/app /app/
 
-# Workaround to create /app/cover directory
-WORKDIR /app/cover
-WORKDIR /
-
 ENTRYPOINT ["/app/app"]

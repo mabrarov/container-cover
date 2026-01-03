@@ -26,10 +26,10 @@ Expected output is:
 Hello, User!
 ```
 
-## Testing
+## Testing with coverage
 
 ```shell
-make test
+make test-cover
 ```
 
 Expected output ends with text like:

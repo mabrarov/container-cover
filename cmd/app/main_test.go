@@ -3,10 +3,10 @@ package main_test
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
-	"sync"
 	"testing"
 	"time"
 
@@ -19,8 +19,8 @@ import (
 )
 
 const (
-	containerCoverDir = "/app/cover"
-	hostCoverDirEnv   = "COVER_DIR"
+	containerCoverDirEnv = "COVER_CONTAINER_DIR"
+	hostCoverDirEnv      = "COVER_HOST_DIR"
 )
 
 func Test_NoArgs(t *testing.T) {
@@ -31,9 +31,8 @@ func Test_NoArgs(t *testing.T) {
 	ctx := t.Context()
 	rootDir := getRootDir(t)
 
-	container, stdout := startContainer(t, ctx, rootDir, nil)
-	waitForCompletionOfTest(t, ctx, container)
-	require.Equal(t, []byte("Hello, World!\n"), stdout.bytes)
+	container := runContainer(t, ctx, rootDir, nil)
+	assertContainerLog(t, ctx, container, "Hello, World!\n")
 
 	// Stop container to ensure coverage data are written.
 	stopContainer(t, ctx, container)
@@ -48,29 +47,12 @@ func Test_SingleArg(t *testing.T) {
 	ctx := t.Context()
 	rootDir := getRootDir(t)
 
-	container, stdout := startContainer(t, ctx, rootDir, []string{"Test"})
-	waitForCompletionOfTest(t, ctx, container)
-	require.Equal(t, []byte("Hello, Test!\n"), stdout.bytes)
+	container := runContainer(t, ctx, rootDir, []string{"Test"})
+	assertContainerLog(t, ctx, container, "Hello, Test!\n")
 
 	// Stop container to ensure coverage data are written.
 	stopContainer(t, ctx, container)
 	copyCoverage(t, ctx, rootDir, container)
-}
-
-type containerStdoutLogConsumer struct {
-	mu    sync.Mutex
-	bytes []byte
-}
-
-func (c *containerStdoutLogConsumer) Accept(l testcontainers.Log) {
-	if l.LogType != testcontainers.StdoutLog {
-		return
-	}
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	c.bytes = append(c.bytes, l.Content...)
 }
 
 func getRootDir(t *testing.T) string {
@@ -84,26 +66,36 @@ func getRootDir(t *testing.T) string {
 	return filepath.Join(filepath.Dir(filename), "..", "..")
 }
 
-func startContainer(t *testing.T, ctx context.Context, rootDir string, args []string) (testcontainers.Container, *containerStdoutLogConsumer) {
+func runContainer(t *testing.T, ctx context.Context, rootDir string, args []string) testcontainers.Container {
 	t.Helper()
 
-	logConsumer := &containerStdoutLogConsumer{}
+	containerCoverDir := os.Getenv(containerCoverDirEnv)
+	var (
+		buildArgs map[string]*string
+		env       map[string]string
+		mounts    []testcontainers.ContainerMount
+	)
+	if len(containerCoverDir) != 0 {
+		buildArgs = map[string]*string{
+			"COVER_INSTRUMENT": lo.ToPtr("1"),
+		}
+		env = map[string]string{
+			"GOCOVERDIR": containerCoverDir,
+		}
+		mounts = []testcontainers.ContainerMount{
+			testcontainers.VolumeMount("", testcontainers.ContainerMountTarget(containerCoverDir)),
+		}
+	}
 
 	container, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
 		ContainerRequest: testcontainers.ContainerRequest{
 			FromDockerfile: testcontainers.FromDockerfile{
-				Context: rootDir,
-				BuildArgs: map[string]*string{
-					"COVER_INSTRUMENT": lo.ToPtr("1"),
-				},
+				Context:   rootDir,
+				BuildArgs: buildArgs,
 			},
-			Env: map[string]string{
-				"GOCOVERDIR": containerCoverDir,
-			},
-			Cmd: args,
-			LogConsumerCfg: &testcontainers.LogConsumerConfig{
-				Consumers: []testcontainers.LogConsumer{logConsumer},
-			},
+			Cmd:    args,
+			Env:    env,
+			Mounts: mounts,
 		},
 		Started: true,
 		Logger:  log.TestLogger(t),
@@ -111,15 +103,23 @@ func startContainer(t *testing.T, ctx context.Context, rootDir string, args []st
 	testcontainers.CleanupContainer(t, container, testcontainers.StopTimeout(0))
 	require.NoError(t, err, "failed to create and start container")
 
-	return container, logConsumer
+	err = wait.ForExit().WaitUntilReady(ctx, container)
+	require.NoError(t, err, "failed to wait until container stops")
+
+	return container
 }
 
-func waitForCompletionOfTest(t *testing.T, ctx context.Context, container testcontainers.Container) {
+func assertContainerLog(t *testing.T, ctx context.Context, container testcontainers.Container, expected string) {
 	t.Helper()
 
-	// Perform test activities - just wait for container to stop.
-	err := wait.ForExit().WaitUntilReady(ctx, container)
-	require.NoError(t, err, "failed to wait until container stops")
+	logReader, err := container.Logs(ctx)
+	require.NoError(t, err, "failed to get container logs")
+	defer func() { _ = logReader.Close() }()
+
+	actual, err := io.ReadAll(logReader)
+	require.NoError(t, err, "failed to read container logs")
+
+	require.Equal(t, []byte(expected), actual)
 }
 
 func stopContainer(t *testing.T, ctx context.Context, container testcontainers.Container) {
@@ -131,6 +131,11 @@ func stopContainer(t *testing.T, ctx context.Context, container testcontainers.C
 
 func copyCoverage(t *testing.T, ctx context.Context, rootDir string, container testcontainers.Container) {
 	t.Helper()
+
+	containerCoverDir := os.Getenv(containerCoverDirEnv)
+	if len(containerCoverDir) == 0 {
+		return
+	}
 
 	hostCoverDir := os.Getenv(hostCoverDirEnv)
 	if len(hostCoverDir) == 0 {
@@ -145,6 +150,9 @@ func copyCoverage(t *testing.T, ctx context.Context, rootDir string, container t
 	}
 
 	containerID := container.GetContainerID()
+	t.Logf("Copying coverage data from directory %q of container %q to host directory %q",
+		containerCoverDir, containerID, hostCoverDir)
+
 	err := copyFromContainer(ctx, containerID, containerCoverDir, hostCoverDir)
 	require.NoError(t, err, "failed to copy coverage data from directory %q of container %q to host directory %q",
 		containerCoverDir, containerID, hostCoverDir)
