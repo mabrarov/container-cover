@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/moby/go-archive"
-	"github.com/samber/lo"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/log"
@@ -77,7 +76,7 @@ func runContainer(t *testing.T, ctx context.Context, rootDir string, args []stri
 	)
 	if len(containerCoverDir) != 0 {
 		buildArgs = map[string]*string{
-			"COVER_INSTRUMENT": lo.ToPtr("1"),
+			"COVER_INSTRUMENT": toPtr("1"),
 		}
 		env = map[string]string{
 			"GOCOVERDIR": containerCoverDir,
@@ -125,7 +124,7 @@ func assertContainerLog(t *testing.T, ctx context.Context, container testcontain
 func stopContainer(t *testing.T, ctx context.Context, container testcontainers.Container) {
 	t.Helper()
 
-	err := container.Stop(ctx, lo.ToPtr(5*time.Minute))
+	err := container.Stop(ctx, toPtr(5*time.Minute))
 	require.NoError(t, err, "failed to stop container")
 }
 
@@ -156,6 +155,10 @@ func copyCoverage(t *testing.T, ctx context.Context, rootDir string, container t
 	err := copyFromContainer(ctx, containerID, containerCoverDir, hostCoverDir)
 	require.NoError(t, err, "failed to copy coverage data from directory %q of container %q to host directory %q",
 		containerCoverDir, containerID, hostCoverDir)
+}
+
+func toPtr[T any](v T) *T {
+	return &v
 }
 
 func copyFromContainer(ctx context.Context, containerID, containerPath, hostDir string) error {
