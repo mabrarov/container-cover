@@ -217,8 +217,9 @@ func createDockerProvider(opts ...testcontainers.ContainerCustomizer) (*testcont
 	// Use a dummy request to get the provider from options.
 	var req testcontainers.GenericContainerRequest
 	for _, opt := range opts {
-		if err := opt.Customize(&req); err != nil {
-			return nil, err
+		err := opt.Customize(&req)
+		if err != nil {
+			return nil, fmt.Errorf("customize option: %w", err)
 		}
 	}
 
@@ -227,16 +228,25 @@ func createDockerProvider(opts ...testcontainers.ContainerCustomizer) (*testcont
 		logging = &noopTestcontainersLogger{}
 	}
 
-	p, err := req.ProviderType.GetProvider(testcontainers.WithLogger(logging))
+	provider, err := req.ProviderType.GetProvider(testcontainers.WithLogger(logging))
 	if err != nil {
 		return nil, err
 	}
 
-	if dp, ok := p.(*testcontainers.DockerProvider); ok {
-		return dp, nil
+	closeProvider := true
+	defer func() {
+		if closeProvider {
+			_ = provider.Close()
+		}
+	}()
+
+	dockerProvider, ok := provider.(*testcontainers.DockerProvider)
+	if !ok {
+		return nil, fmt.Errorf("unknown type of container provider: %T", provider)
 	}
 
-	return nil, fmt.Errorf("unknown type of container provider: %T", p)
+	closeProvider = false
+	return dockerProvider, nil
 }
 
 type noopTestcontainersLogger struct{}
