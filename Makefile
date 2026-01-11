@@ -39,17 +39,17 @@ $(eval $(call noexpand,COVER_INSTRUMENT))
 escape = $(subst ','\'',$(1))
 squote = '$(call escape,$(1))'
 
-APP_BUILD_OUTPUT            := $(PREFIX)/$(BINNAME)$(shell $(call squote,$(GO)) env GOEXE)
-COVERAGE_OUTPUT             := $(MAKEFILE_DIR)/coverage.out
-COVERAGE_OUTPUT_HOST        := $(MAKEFILE_DIR)/.build/coverage/host/coverage.out
-COVERAGE_CONTAINER_DIR      := //tmp/cover
-COVERAGE_CONTAINER_HOST_DIR := $(MAKEFILE_DIR)/.build/coverage/container/$(shell basename $(call squote,$(COVERAGE_CONTAINER_DIR)))
-COVERAGE_OUTPUT_CONTAINER   := $(MAKEFILE_DIR)/.build/coverage/container/coverage.out
+APP_BUILD_OUTPUT       := $(PREFIX)/$(BINNAME)$(shell $(call squote,$(GO)) env GOEXE)
+COVER_OUTPUT           := $(MAKEFILE_DIR)/coverage.out
+COVER_OUTPUT_HOST      := $(MAKEFILE_DIR)/.build/coverage/host/coverage.out
+COVER_OUTPUT_CONTAINER := $(MAKEFILE_DIR)/.build/coverage/container/coverage.out
+COVER_CONTAINER_DIR    := //tmp/cover
+COVER_HOST_DIR         := $(MAKEFILE_DIR)/.build/coverage/container/$(shell basename $(call squote,$(COVER_CONTAINER_DIR)))
 
 ifneq ($(COVER_INSTRUMENT),0)
-    COVER_BUILD_OPTION := -cover -covermode count
+    COVER_BUILD_OPTIONS := -cover -covermode count
 else
-    COVER_BUILD_OPTION :=
+    COVER_BUILD_OPTIONS :=
 endif
 
 .PHONY: all
@@ -76,12 +76,12 @@ test:
 
 .PHONY: test-cover
 test-cover: test-cover-deps
-	mkdir -p "$$(dirname $(call squote,$(COVERAGE_OUTPUT_HOST)))"
-	$(RM) -r $(call squote,$(COVERAGE_CONTAINER_HOST_DIR))
-	COVER_CONTAINER_DIR=$(call squote,$(COVERAGE_CONTAINER_DIR)) COVER_HOST_DIR="$$(dirname $(call squote,$(COVERAGE_CONTAINER_HOST_DIR)))" $(call squote,$(GO)) test -C $(call squote,$(MAKEFILE_DIR)) -v -count 1 -cover -covermode count -coverpkg=./... -coverprofile=$(call squote,$(COVERAGE_OUTPUT_HOST)) ./...
-	$(call squote,$(GO)) tool -C $(call squote,$(MAKEFILE_DIR)) covdata textfmt -i=$(call squote,$(COVERAGE_CONTAINER_HOST_DIR)) -o $(call squote,$(COVERAGE_OUTPUT_CONTAINER))
-	$(call squote,$(GOCOVMERGE)) -o $(call squote,$(COVERAGE_OUTPUT)) $(call squote,$(COVERAGE_OUTPUT_HOST)) $(call squote,$(COVERAGE_OUTPUT_CONTAINER))
-	$(call squote,$(GO)) tool -C $(call squote,$(MAKEFILE_DIR)) cover -func=$(call squote,$(COVERAGE_OUTPUT))
+	$(RM) -r $(call squote,$(COVER_HOST_DIR))
+	mkdir -p "$$(dirname $(call squote,$(COVER_OUTPUT_HOST)))"
+	COVER_CONTAINER_DIR=$(call squote,$(COVER_CONTAINER_DIR)) COVER_HOST_DIR="$$(dirname $(call squote,$(COVER_HOST_DIR)))" $(call squote,$(GO)) test -C $(call squote,$(MAKEFILE_DIR)) -v -count 1 -cover -covermode count -coverpkg=./... -coverprofile=$(call squote,$(COVER_OUTPUT_HOST)) ./...
+	$(call squote,$(GO)) tool -C $(call squote,$(MAKEFILE_DIR)) covdata textfmt -i=$(call squote,$(COVER_HOST_DIR)) -o $(call squote,$(COVER_OUTPUT_CONTAINER))
+	$(call squote,$(GOCOVMERGE)) -o $(call squote,$(COVER_OUTPUT)) $(call squote,$(COVER_OUTPUT_HOST)) $(call squote,$(COVER_OUTPUT_CONTAINER))
+	$(call squote,$(GO)) tool -C $(call squote,$(MAKEFILE_DIR)) cover -func=$(call squote,$(COVER_OUTPUT))
 
 .PHONY: test-cover-deps
 test-cover-deps:
@@ -89,7 +89,7 @@ test-cover-deps:
 
 .PHONY: build
 build:
-	CGO_ENABLED=0 $(call squote,$(GO)) build -C $(call squote,$(MAKEFILE_DIR))$(if $(COVER_BUILD_OPTION), $(COVER_BUILD_OPTION),) -trimpath -o $(call squote,$(APP_BUILD_OUTPUT)) ./cmd/app
+	CGO_ENABLED=0 $(call squote,$(GO)) build -C $(call squote,$(MAKEFILE_DIR))$(if $(COVER_BUILD_OPTIONS), $(COVER_BUILD_OPTIONS),) -trimpath -o $(call squote,$(APP_BUILD_OUTPUT)) ./cmd/app
 
 .PHONY: clean
 clean: clean-app clean-coverage
@@ -100,7 +100,7 @@ clean-app:
 
 .PHONY: clean-coverage
 clean-coverage:
-	$(RM) $(call squote,$(COVERAGE_OUTPUT))
-	$(RM) $(call squote,$(COVERAGE_OUTPUT_HOST))
-	$(RM) $(call squote,$(COVERAGE_OUTPUT_CONTAINER))
-	$(RM) -r $(call squote,$(COVERAGE_CONTAINER_HOST_DIR))
+	$(RM) $(call squote,$(COVER_OUTPUT))
+	$(RM) $(call squote,$(COVER_OUTPUT_HOST))
+	$(RM) $(call squote,$(COVER_OUTPUT_CONTAINER))
+	$(RM) -r $(call squote,$(COVER_HOST_DIR))
