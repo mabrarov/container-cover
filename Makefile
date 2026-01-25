@@ -44,7 +44,7 @@ COVER_OUTPUT           := $(MAKEFILE_DIR)/coverage.out
 COVER_OUTPUT_HOST      := $(MAKEFILE_DIR)/.build/coverage/host/coverage.out
 COVER_OUTPUT_CONTAINER := $(MAKEFILE_DIR)/.build/coverage/container/coverage.out
 COVER_CONTAINER_DIR    := //tmp/cover
-COVER_HOST_DIR         := $(MAKEFILE_DIR)/.build/coverage/container/$(shell basename $(call squote,$(COVER_CONTAINER_DIR)))
+COVER_HOST_DIR         := $(MAKEFILE_DIR)/.build/coverage/container/cover
 
 ifneq ($(COVER_INSTRUMENT),0)
     COVER_BUILD_OPTIONS := -cover -covermode count
@@ -78,7 +78,7 @@ test:
 test-cover: test-cover-deps
 	$(RM) -r $(call squote,$(COVER_HOST_DIR))
 	mkdir -p "$$(dirname $(call squote,$(COVER_OUTPUT_HOST)))"
-	COVER_CONTAINER_DIR=$(call squote,$(COVER_CONTAINER_DIR)) COVER_HOST_DIR="$$(dirname $(call squote,$(COVER_HOST_DIR)))" $(call squote,$(GO)) test -C $(call squote,$(MAKEFILE_DIR)) -v -count 1 -cover -covermode count -coverpkg=./... -coverprofile=$(call squote,$(COVER_OUTPUT_HOST)) ./...
+	COVER_CONTAINER_DIR=$(call squote,$(COVER_CONTAINER_DIR)) COVER_HOST_DIR=$(call squote,$(COVER_HOST_DIR)) $(call squote,$(GO)) test -C $(call squote,$(MAKEFILE_DIR)) -v -count 1 -cover -covermode count -coverpkg=./... -coverprofile=$(call squote,$(COVER_OUTPUT_HOST)) ./...
 	$(call squote,$(GO)) tool -C $(call squote,$(MAKEFILE_DIR)) covdata textfmt -i=$(call squote,$(COVER_HOST_DIR)) -o $(call squote,$(COVER_OUTPUT_CONTAINER))
 	$(call squote,$(GOCOVMERGE)) -o $(call squote,$(COVER_OUTPUT)) $(call squote,$(COVER_OUTPUT_HOST)) $(call squote,$(COVER_OUTPUT_CONTAINER))
 	$(call squote,$(GO)) tool -C $(call squote,$(MAKEFILE_DIR)) cover -func=$(call squote,$(COVER_OUTPUT))
