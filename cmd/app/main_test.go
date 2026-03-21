@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/docker/docker/api/types/build"
 	"github.com/moby/go-archive"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
@@ -91,6 +92,9 @@ func runContainer(t *testing.T, ctx context.Context, rootDir string, args []stri
 			FromDockerfile: testcontainers.FromDockerfile{
 				Context:   rootDir,
 				BuildArgs: buildArgs,
+				BuildOptionsModifier: func(options *build.ImageBuildOptions) {
+					options.Version = build.BuilderBuildKit
+				},
 			},
 			Cmd:    args,
 			Env:    env,
