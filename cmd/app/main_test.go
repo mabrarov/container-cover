@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/docker/docker/api/types/build"
 	"github.com/moby/go-archive"
+	"github.com/moby/moby/api/types/build"
 	"github.com/moby/moby/client"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
@@ -93,7 +93,7 @@ func runContainer(t *testing.T, ctx context.Context, rootDir string, args []stri
 			FromDockerfile: testcontainers.FromDockerfile{
 				Context:   rootDir,
 				BuildArgs: buildArgs,
-				BuildOptionsModifier: func(options *build.ImageBuildOptions) {
+				BuildOptionsModifier: func(options *client.ImageBuildOptions) {
 					options.Version = build.BuilderBuildKit
 				},
 			},
