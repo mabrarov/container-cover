@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/moby/go-archive"
+	"github.com/moby/moby/client"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/log"
@@ -168,11 +169,13 @@ func copyFromContainer(ctx context.Context, containerID, containerPath, hostDir 
 	}
 	defer func() { _ = provider.Close() }()
 
-	content, stat, err := provider.Client().CopyFromContainer(ctx, containerID, containerPath)
+	copyResult, err := provider.Client().CopyFromContainer(ctx, containerID, client.CopyFromContainerOptions{
+		SourcePath: containerPath,
+	})
 	if err != nil {
 		return fmt.Errorf("copy %q from container %q: %w", containerPath, containerID, err)
 	}
-	defer func() { _ = content.Close() }()
+	defer func() { _ = copyResult.Content.Close() }()
 
 	err = os.MkdirAll(hostDir, os.ModePerm)
 	if err != nil {
@@ -182,10 +185,10 @@ func copyFromContainer(ctx context.Context, containerID, containerPath, hostDir 
 	srcInfo := archive.CopyInfo{
 		Path:   containerPath,
 		Exists: true,
-		IsDir:  stat.Mode.IsDir(),
+		IsDir:  copyResult.Stat.Mode.IsDir(),
 	}
 
-	err = archive.CopyTo(content, srcInfo, hostDir)
+	err = archive.CopyTo(copyResult.Content, srcInfo, hostDir)
 	if err != nil {
 		return fmt.Errorf("untar to %q: %w", hostDir, err)
 	}
